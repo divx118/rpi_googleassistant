@@ -1,0 +1,162 @@
+#!/bin/sh
+
+# error function to gracefully exit.
+error() {
+    ecode="$1"
+    shift
+    echo "$*" 1>&2
+    exit "$ecode"
+}
+
+# check if script is run as root
+uid=`id -u $USER`
+if [ $uid -ne 0 ]; then
+    error 1 "$0 must be run as root"
+fi
+
+# Definition of variables
+APPLICATION="${0##*/}"
+NUMBERS_INPUT="3"
+TIME="0.1"
+# Using wiringpi gpio numbering
+GPIO_OUTPUT="0"
+GPIO_INPUTS="1 2 3"
+GPIO="/usr/bin/gpio"
+c="0"
+# Calculate maximum input numbers
+for i in $GPIO_INPUTS; do
+    c=$((c+1))
+    INPUT_DESC="$INPUT_DESC Input \"$c\" = \"$i\"
+                             "
+done
+NUMBERS_INPUT="$c"
+
+USAGE="$APPLICATION [options] name [...]
+Control input HDMI switcher
+
+Options:
+    -i                    Print out current active input.
+    -s INPUT              Set input to given INPUT <1 to $NUMBERS_INPUT>.
+                          On success it gives back the given input on fail it
+                          changes back to the previous input.
+    -t TIME               Set sleep time between switches default is \"$TIME\".
+    -c                    Check which inputs are active, this will take some
+                          time. It will cycle through the inputs to check this.
+    -h print this help text.
+
+    Info wiringpi GPIO pins: Output is: \"$GPIO_OUTPUT\"
+                             Inputs are:
+                             $INPUT_DESC
+    "
+#echo "$USAGE"
+
+INFO=""
+CHECK_INPUTS=""
+INPUT=""
+
+# Process arguments
+while getopts 's:t:ich' f; do
+    case "$f" in
+    i) INFO='y';;
+    c) CHECK_INPUTS='y';;
+    t) TIME="$OPTARG";;
+    s) INPUT="$OPTARG";;
+    h) echo "$USAGE"
+       exit 0;;
+    \?) echo "$USAGE"
+        exit 0;;
+    esac
+done
+
+echo $TIME
+echo $INPUT
+echo $INFO
+echo $CHECK_INPUTS
+if [ "$INFO" = "y" -a "$CHECK_INPUTS" = "y" ] || \
+     [ "$INPUT" != "" -a "$INFO" = "y" ] || [ "$CHECK_INPUTS" = "y" \
+     -a "$INPUT" != "" ]; then
+    echo "wrong combinations of arguments"
+
+    echo "$USAGE"
+    exit 0
+fi
+# set hdmi INPUT gpio to ouput mode
+"$GPIO" mode "$GPIO_OUTPUT" output
+"$GPIO" write "$GPIO_OUTPUT" 1
+# set hdmi status inputs to gpio input mode
+for i in $GPIO_INPUTS; do
+    "$GPIO" mode "$i" input
+done
+c="0"
+# check status
+if [ "$INFO" = "y" ]; then
+    for i in $GPIO_INPUTS; do
+        c=$((c+1))
+        result=`"$GPIO" read "$i"`
+        if [ "$result" = "1" ]; then
+            echo "$c"
+            break
+        fi
+    done
+    exit 0
+fi
+c="0"
+# set input hdmi switch
+if [ "$INPUT" != "" ]; then
+    for i in $GPIO_INPUTS; do
+        c=$((c+1))
+        result=`"$GPIO" read "$i"`
+        if [ "$result" = "1" -a "$c" = "$INPUT" ]; then
+            echo "$c"
+            exit 0
+        fi
+        if [ "$result" = "1"  ]; then
+            break
+        fi
+    done
+    CURRENT_INPUT="$c"
+    for i in $GPIO_INPUTS; do
+        sleep "$TIME"
+        "$GPIO" write "$GPIO_OUTPUT" 0
+        sleep "$TIME"
+        "$GPIO" write "$GPIO_OUTPUT" 1
+        sleep "$TIME"
+        c="0"
+        for i in $GPIO_INPUTS; do
+            c=$((c+1))
+            result=`"$GPIO" read "$i"`
+            if [ "$result" = "1" ]; then
+                echo "$c"
+                break
+            fi
+        done
+        if [ "$c" = "$INPUT" ]; then
+            echo "$c"
+            exit 0
+        fi
+    done
+
+    INPUT="$CURRENT_INPUT"
+    for i in $GPIO_INPUTS; do
+        sleep "$TIME"
+        "$GPIO" write "$GPIO_OUTPUT" 0
+        sleep "$TIME"
+        "$GPIO" write "$GPIO_OUTPUT" 1
+        sleep "$TIME"
+        c="0"
+        for i in $GPIO_INPUTS; do
+            c=$((c+1))
+            result=`"$GPIO" read "$i"`
+            if [ "$result" = "1" ]; then
+                echo "$c"
+                break
+            fi
+        done
+        if [ "$c" = "$INPUT" ]; then
+            echo "$c"
+            error 2 "Not possible to change to given input"
+        fi
+    done
+    error 2 "Not possible to change to given input or previous input"
+fi
+

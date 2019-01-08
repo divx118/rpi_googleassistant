@@ -40,6 +40,7 @@ living_room = "3a932931-8d26-b4ae-37db-7139f4e1874c"
 mpd_server = "192.168.178.4"
 mpd_port = "6600"
 mpd_commands = "search pause play stop clear next previous song shuffle"
+mpd_trigger = "music"
 
 # Clean shell output
 def cln(ret):
@@ -176,26 +177,50 @@ class MyAssistant:
             if (muted == "false" and not self._is_snap_muted):
                 set_mute_snap('true', living_room)
                 self._is_snap_muted = True
-        elif event.type == EventType.ON_RECOGNIZING_SPEECH_FINISHED and event.args:
-            print('You said !!:', event.args['text'])
+        elif (event.type == EventType.ON_RECOGNIZING_SPEECH_FINISHED
+              and event.args):
             text = event.args['text'].lower()
+            print('You said ###:', event.args['text'])
             print(mpd_commands)
-            print(len(text.split()))
-            # Prevent needing to repeat the trigger word 'music' when mpd is playing
-            if (self._is_snap_muted and text.split()[0] in mpd_commands):
-                text = 'music ' + text
-                print('You said:', text)
-
-            if ('set volume' in text or text.split()[0] == 'volume'):
-                self._assistant.stop_conversation()
-                #change_volume_pi(text)
-                print('hello')
-            elif (text.split()[0] == 'music' and len(text.split()) > 1):
-                print('mpd command')
-                if text.split()[1] in mpd_commands:
-                    self._assistant.stop_conversation()
-                    music_pi(text, self)
+            if text == "":
+                self._assistant.send_text_query("repeat after me, you said nothing")
                 
+            if text is not "":
+                print("why are we here")
+                
+                # Prevent needing to repeat the trigger word 'music' when mpd
+                # is playing
+                if (self._is_snap_muted and text.split()[0] in mpd_commands):
+                    text = mpd_trigger + ' ' + text
+                    print('You said:', text)
+
+                if ('set volume' in text or text.split()[0] == 'volume'):
+                    self._assistant.stop_conversation()
+                    #change_volume_pi(text)
+                    print('hello')
+                elif (text.split()[0] == mpd_trigger and len(text.split()) > 1):
+                    print('mpd command')
+                    if text.split()[1] in mpd_commands:
+                        self._assistant.stop_conversation()
+                        music_pi(text, self)
+                elif (text.split()[0] in "enable disable" and len(text.split()) > 1):
+                    
+                    if text.split()[0] == "enable":
+                        mute = 'false'
+                    else:
+                        mute = 'true'
+                    print("@@@@@@@@@@@@@@ " + text.split(" ",1)[1])
+                    if text.split(" ",1)[1] == "living room":
+                        set_mute_snap(mute, living_room)
+                        self._is_snap_muted = False
+                        self._assistant.stop_conversation()
+                    elif text.split(" ",1)[1] == "kitchen":
+                        set_mute_snap(mute, kitchen)
+                        self._assistant.stop_conversation()
+                    else:
+                        self._assistant.send_text_query("repeat after me, I cannot "
+                            + text)
+                    
             print('No special commands so get assistant response')
         elif event.type == EventType.ON_END_OF_UTTERANCE:
             self._can_start_conversation = False
@@ -206,12 +231,14 @@ class MyAssistant:
             self._board.led.state = Led.BEACON_DARK  # Ready.
             self._can_start_conversation = True
             print("ok we are here")
-            if (self._is_snap_muted and event.type == EventType.ON_CONVERSATION_TURN_FINISHED
+            if (self._is_snap_muted
+                and event.type == EventType.ON_CONVERSATION_TURN_FINISHED
                 and not event.args['with_follow_on_turn']):
                 print("ok we are here now")
                 set_mute_snap('false', living_room)
                 self._is_snap_muted = False
-        elif event.type == EventType.ON_ASSISTANT_ERROR and event.args and event.args['is_fatal']:
+        elif (event.type == EventType.ON_ASSISTANT_ERROR and event.args
+              and event.args['is_fatal']):
             sys.exit(1)
             
     def _on_button_pressed(self):

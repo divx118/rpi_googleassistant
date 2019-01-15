@@ -1,0 +1,91 @@
+#!/bin/sh
+mpd --stdout --no-daemon &
+#sleep 5
+B="false"
+C="false"
+snapserver -d -s 'pipe:///tmp/snapfifo?name=Radio&mode=read'
+while true; do
+if [ `mpc outputs|grep "Kitchen"|grep -oE '[^ ]+$'` = "disabled" -a "$B" = "false" ]; then
+  echo '{"id":5,"jsonrpc":"2.0","method":"Group.SetMute","params":{"id":"9255b82e-84fb-7459-e7af-a0910638aaab","mute":true}} ' | nc -w 1 192.168.178.4 1705
+  B="true"
+elif [ `mpc outputs|grep "Kitchen"|grep -oE '[^ ]+$'` = "enabled" -a "$B" = "true" ]; then
+  echo '{"id":5,"jsonrpc":"2.0","method":"Group.SetMute","params":{"id":"9255b82e-84fb-7459-e7af-a0910638aaab","mute":false}} ' | nc -w 1 192.168.178.4 1705
+  B="false"
+fi
+
+if [ `mpc outputs|grep "Living room"|grep -oE '[^ ]+$'` = "disabled" -a "$C" = "false" ]; then
+  echo '{"id":5,"jsonrpc":"2.0","method":"Group.SetMute","params":{"id":"3a932931-8d26-b4ae-37db-7139f4e1874c","mute":true}} ' | nc -w 1 192.168.178.4 1705
+  C="true"
+elif [ `mpc outputs|grep "Living room"|grep -oE '[^ ]+$'` = "enabled" -a "$C" = "true" ]; then
+  echo '{"id":5,"jsonrpc":"2.0","method":"Group.SetMute","params":{"id":"3a932931-8d26-b4ae-37db-7139f4e1874c","mute":false}} ' | nc -w 1 192.168.178.4 1705
+  C="false"
+fi
+sleep 1
+maurice="http://192.168.178.4:3301/pc.mp3"
+tina="http://192.168.178.4:3303/pc.mp3"
+IFS=$'\n'
+if [ `mpc outputs|grep "Spotify Maurice"|grep -oE '[^ ]+$'` = "disabled" ]; then
+  remove_maurice="true"
+else
+  remove_maurice="false"
+  mpc disable "Spotify Tina"
+fi
+  counter=0
+  for song in `mpc playlist`; do
+    counter=$((counter+1))
+    if [ "$song" = "$maurice" ]; then
+      if [ "$remove_maurice" = "true" ]; then 
+        mpc del "$counter"
+      elif [ "$remove_tina" = "true" ]; then
+        if [ "$counter" -gt 1 ]; then
+          mpc move "$counter" 1
+          mpc play 1
+          counter=1
+        fi
+        break
+      fi
+    fi
+    if [ "$counter" -gt 20 ]; then
+      break
+    fi
+  done
+if [ "$remove_maurice" = "false" -a "$remove_tina" = "true" -a "$counter" -gt 1 ]; then
+        mpc play 1
+        mpc insert "$maurice"
+        mpc move 2 1
+        mpc play 1
+fi
+if [ `mpc outputs|grep "Spotify Tina"|grep -oE '[^ ]+$'` = "disabled" ]; then
+  remove_tina="true"
+else
+  remove_tina="false"
+  mpc disable "Spotify Maurice"
+fi
+  counter=0
+  for song in `mpc playlist`; do
+    counter=$((counter+1))
+    if [ "$song" = "$tina" ]; then
+      if [ "$remove_tina" = "true" ]; then 
+        mpc del "$counter"
+      elif [ "$remove_maurice" = "true" ]; then
+        if [ "$counter" -gt 1 ]; then
+          mpc move "$counter" 1
+          mpc play 1
+          counter=1
+        fi
+        break
+      fi
+    fi
+    if [ "$counter" -gt 20 ]; then
+      break
+    fi
+  done
+if [ "$remove_tina" = "false" -a "$remove_maurice" = "true" -a "$counter" -gt 1 ]; then
+        mpc play 1
+        mpc insert "$tina"
+        mpc move 2 1
+        mpc play 1
+fi
+done
+
+/bin/sh

@@ -3,6 +3,8 @@ mpd --stdout --no-daemon &
 #sleep 5
 B="false"
 C="false"
+first="false"
+first_tina="false"
 snapserver -d -s 'pipe:///tmp/snapfifo?name=Radio&mode=read'
 while true; do
 if [ `mpc outputs|grep "Kitchen"|grep -oE '[^ ]+$'` = "disabled" -a "$B" = "false" ]; then
@@ -26,9 +28,14 @@ tina="http://192.168.178.4:3303/pc.mp3"
 IFS=$'\n'
 if [ `mpc outputs|grep "Spotify Maurice"|grep -oE '[^ ]+$'` = "disabled" ]; then
   remove_maurice="true"
+  first="false"
 else
   remove_maurice="false"
-  mpc disable "Spotify Tina"
+  if [ "$first" = "false" ]; then
+    first="true"
+    mpc disable "Spotify Tina"
+  fi
+
 fi
   counter=0
   for song in `mpc playlist`; do
@@ -57,9 +64,13 @@ if [ "$remove_maurice" = "false" -a "$remove_tina" = "true" -a "$counter" -gt 1 
 fi
 if [ `mpc outputs|grep "Spotify Tina"|grep -oE '[^ ]+$'` = "disabled" ]; then
   remove_tina="true"
+  first_tina="false"
 else
   remove_tina="false"
-  mpc disable "Spotify Maurice"
+  if [ "$first_tina" = "false" ]; then
+    first_tina="true"
+    mpc disable "Spotify Maurice"
+  fi
 fi
   counter=0
   for song in `mpc playlist`; do

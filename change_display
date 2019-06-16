@@ -18,6 +18,7 @@ fi
 APPLICATION="${0##*/}"
 NUMBERS_INPUT="3"
 TIME="0.1"
+RPI_INPUT=1
 # Using wiringpi gpio numbering
 GPIO_OUTPUT="0"
 GPIO_INPUTS="1 2 3"
@@ -42,6 +43,13 @@ Options:
     -t TIME               Set sleep time between switches default is \"$TIME\".
     -c                    Check which inputs are active, this will take some
                           time. It will cycle through the inputs to check this.
+    -o RPI_INPUT          Turn off the monitor Note: if you switch to an active
+                          input it will automagically turn on again.
+                          It takes as argument the input on which this script
+                          runs.
+    -n RPI_INPUT          Turns the monitor on and switches to the given input.
+                          It takes as argument the input on which this script
+                          runs.
     -h print this help text.
 
     Info wiringpi GPIO pins: Output is: \"$GPIO_OUTPUT\"
@@ -53,14 +61,19 @@ Options:
 INFO=""
 CHECK_INPUTS=""
 INPUT=""
+TURNOFF=""
 
 # Process arguments
-while getopts 's:t:ich' f; do
+while getopts 's:t:o:n:ich' f; do
     case "$f" in
     i) INFO='y';;
     c) CHECK_INPUTS='y';;
     t) TIME="$OPTARG";;
     s) INPUT="$OPTARG";;
+    o) RPI_INPUT="$OPTARG"
+       TURNOFF='y';;
+    n) RPI_INPUT="$OPTARG"
+       TURNOFF='n';;
     h) echo "$USAGE"
        exit 0;;
     \?) echo "$USAGE"
@@ -68,10 +81,12 @@ while getopts 's:t:ich' f; do
     esac
 done
 
-echo $TIME
-echo $INPUT
-echo $INFO
-echo $CHECK_INPUTS
+#echo $TIME
+#echo $INPUT
+#echo $INFO
+#echo $CHECK_INPUTS
+# Need to think about below to make a more robust and easier way to
+# check if the wrong combination of arguments is used.
 if [ "$INFO" = "y" -a "$CHECK_INPUTS" = "y" ] || \
      [ "$INPUT" != "" -a "$INFO" = "y" ] || [ "$CHECK_INPUTS" = "y" \
      -a "$INPUT" != "" ]; then
@@ -101,12 +116,20 @@ if [ "$INFO" = "y" ]; then
     exit 0
 fi
 c="0"
+if [ "$TURNOFF" != "" ]; then
+    INPUT="$RPI_INPUT"
+fi
 # set input hdmi switch
 if [ "$INPUT" != "" ]; then
     for i in $GPIO_INPUTS; do
         c=$((c+1))
         result=`"$GPIO" read "$i"`
         if [ "$result" = "1" -a "$c" = "$INPUT" ]; then
+            if [ "$TURNOFF" = "y" ]; then
+                vcgencmd display_power 0
+            elif [  "$TURNOFF" = "n" ]; then
+                vcgencmd display_power 1
+            fi
             echo "$c"
             exit 0
         fi
@@ -126,12 +149,17 @@ if [ "$INPUT" != "" ]; then
             c=$((c+1))
             result=`"$GPIO" read "$i"`
             if [ "$result" = "1" ]; then
-                echo "$c"
+                #echo "$c"
                 break
             fi
         done
         if [ "$c" = "$INPUT" ]; then
             echo "$c"
+            if [ "$TURNOFF" = "y" ]; then
+                vcgencmd display_power 0
+            elif [  "$TURNOFF" = "n" ]; then
+                vcgencmd display_power 1
+            fi
             exit 0
         fi
     done
